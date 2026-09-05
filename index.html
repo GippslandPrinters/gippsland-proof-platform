@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gippsland Printers - Proof & Workflow Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #5a3e36;
+      --secondary: #8b7355;
+      --success: #27ae60;
+      --warning: #f39c12;
+      --danger: #e74c3c;
+      --light: #ecf0f1;
+      --dark: #2c3e50;
+      --border: #bdc3c7;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+      color: var(--dark);
+      line-height: 1.6;
+    }
+
+    .header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    .controls {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .control-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex: 1;
+      min-width: 250px;
+    }
+
+    .control-group label {
+      font-weight: 600;
+      color: var(--dark);
+      font-size: 14px;
+    }
+
+    input[type="file"],
+    input[type="email"],
+    input[type="text"],
+    select {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 14px;
+      flex: 1;
+      min-width: 150px;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: var(--secondary);
+    }
+
+    button.secondary {
+      background: var(--secondary);
+    }
+
+    button.success {
+      background: var(--success);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .tab-button {
+      padding: 12px 20px;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--dark);
+      transition: all 0.3s;
+    }
+
+    .tab-button.active {
+      border-bottom-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .column {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      min-height: 600px;
+      border-top: 4px solid var(--primary);
+    }
+
+    .column h2 {
+      font-size: 18px;
+      margin-bottom: 20px;
+      color: var(--dark);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .column-count {
+      background: var(--light);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--dark);
+    }
+
+    .job-card {
+      background: var(--light);
+      border: 2px solid transparent;
+      border-radius: 6px;
+      padding: 15px;
+      margin-bottom: 12px;
+      cursor: move;
+      transition: all 0.3s;
+      user-select: none;
+    }
+
+    .job-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
+    }
+
+    .job-card.drag-over {
+      border-color: var(--primary);
+      background: rgba(90, 62, 54, 0.05);
+    }
+
+    .job-card.warning {
+      border-left: 4px solid var(--warning);
+      background: rgba(243, 156, 18, 0.05);
+    }
+
+    .job-card.critical {
+      border-left: 4px solid var(--danger);
+      background: rgba(231, 76, 60, 0.05);
+    }
+
+    .job-number {
+      font-weight: 700;
+      color: var(--primary);
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+
+    .job-customer {
+      font-size: 14px;
+      color: var(--dark);
+      margin-bottom: 8px;
+    }
+
+    .job-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #7f8c8d;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .days-waiting {
+      font-weight: 600;
+    }
+
+    .days-waiting.warning {
+      color: var(--warning);
+    }
+
+    .days-waiting.critical {
+      color: var(--danger);
+    }
+
+    .job-value {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    .drop-zone {
+      min-height: 500px;
+      border-radius: 4px;
+      transition: background 0.3s;
+    }
+
+    .drop-zone.drag-over {
+      background: rgba(90, 62, 54, 0.05);
+      border: 2px dashed var(--primary);
+    }
+
+    .empty-state {
+      text-align: center;
+      color: #bdc3c7;
+      padding: 40px 20px;
+      font-size: 14px;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+
+    .modal h2 {
+      margin-bottom: 20px;
+      color: var(--dark);
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--dark);
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 25px;
+    }
+
+    .modal-actions button {
+      flex: 1;
+    }
+
+    .modal-actions button:last-child {
+      flex: 1;
+    }
+
+    .close-modal {
+      background: var(--light);
+      color: var(--dark);
+    }
+
+    .close-modal:hover {
+      background: var(--border);
+    }
+
+    .success-message {
+      background: #d4edda;
+      color: #155724;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      display: none;
+      border-left: 4px solid var(--success);
+    }
+
+    .success-message.show {
+      display: block;
+    }
+
+    .error-message {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      display: none;
+      border-left: 4px solid var(--danger);
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .control-group {
+        flex-direction: column;
+      }
+
+      input[type="file"],
+      input[type="email"],
+      input[type="text"],
+      select,
+      .control-group input,
+      .control-group select {
+        width: 100%;
+      }
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+
+    .badge.urgent {
+      background: var(--danger);
+      color: white;
+    }
+
+    .badge.warning {
+      background: var(--warning);
+      color: white;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      color: var(--secondary);
+    }
+
+    .loading.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="container">
+      <h1>📋 Gippsland Printers Proof & Workflow Dashboard</h1>
+      <p>Manage proofs, approvals, and job workflow in one place</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Import CSV Section -->
+    <div class="controls">
+      <div class="control-group">
+        <label>Import Jobs from E&P:</label>
+        <input type="file" id="csvFile" accept=".csv" />
+        <button onclick="uploadCSV()">Import Jobs</button>
+      </div>
+      <div class="control-group">
+        <button class="secondary" onclick="toggleSendProofModal()">📤 Send Proof</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-button active" onclick="switchTab('dashboard')">Dashboard</button>
+      <button class="tab-button" onclick="switchTab('send-proof')">Send Proof</button>
+    </div>
+
+    <!-- Dashboard Tab -->
+    <div id="dashboard-tab" class="tab-content">
+      <div class="dashboard">
+        <!-- Waiting for Design Column -->
+        <div class="column">
+          <h2>
+            ⏳ Waiting for Design
+            <span class="column-count" id="design-count">0</span>
+          </h2>
+          <div class="drop-zone" id="waiting-design" ondrop="allowDrop(event, 'design')" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
+            <div id="waiting-design-jobs"></div>
+            <div class="empty-state" id="design-empty">No jobs waiting for design</div>
+          </div>
+        </div>
+
+        <!-- Proofs Sent Column -->
+        <div class="column">
+          <h2>
+            🔍 Proofs Sent
+            <span class="column-count" id="proof-count">0</span>
+          </h2>
+          <div class="drop-zone" id="proofs-sent" ondrop="allowDrop(event, 'proof')" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
+            <div id="proofs-sent-jobs"></div>
+            <div class="empty-state" id="proof-empty">No proofs pending approval</div>
+          </div>
+        </div>
+
+        <!-- Approved & Ready Column -->
+        <div class="column">
+          <h2>
+            ✅ Approved & Ready
+            <span class="column-count" id="ready-count">0</span>
+          </h2>
+          <div class="drop-zone" id="approved-ready" ondrop="allowDrop(event, 'ready')" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
+            <div id="approved-ready-jobs"></div>
+            <div class="empty-state" id="ready-empty">No jobs ready for production</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Send Proof Tab -->
+    <div id="send-proof-tab" class="tab-content" style="display: none;">
+      <div style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; margin: 0 auto;">
+        <h2 style="margin-bottom: 20px;">Send Proof to Client</h2>
+
+        <div class="success-message" id="proof-success">
+          ✓ Proof sent successfully! Client will receive an email with the approval link.
+        </div>
+
+        <div class="error-message" id="proof-error"></div>
+
+        <form onsubmit="sendProof(event)">
+          <div class="form-group">
+            <label>Job Number *</label>
+            <input type="text" id="proofJobNumber" placeholder="e.g., 230996" required />
+          </div>
+
+          <div class="form-group">
+            <label>Client Email *</label>
+            <input type="email" id="proofClientEmail" placeholder="client@example.com" required />
+          </div>
+
+          <div class="form-group">
+            <label>Proof File (PDF) *</label>
+            <input type="file" id="proofFile" accept=".pdf" required />
+          </div>
+
+          <div class="form-group">
+            <label>Version</label>
+            <input type="text" id="proofVersion" placeholder="e.g., 1, V2, Final" value="1" />
+          </div>
+
+          <div class="form-group">
+            <label>Notes</label>
+            <textarea id="proofNotes" placeholder="Any notes for the client..."></textarea>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <button type="submit" class="success">📤 Send Proof</button>
+            <button type="reset" class="secondary">Clear</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div id="sendProofModal" class="modal">
+    <div class="modal-content">
+      <h2>Send Proof to Client</h2>
+
+      <div class="success-message" id="modal-success"></div>
+      <div class="error-message" id="modal-error"></div>
+
+      <div class="form-group">
+        <label>Job Number</label>
+        <input type="text" id="modalJobNumber" placeholder="e.g., 230996" />
+      </div>
+
+      <div class="form-group">
+        <label>Client Email</label>
+        <input type="email" id="modalClientEmail" placeholder="client@example.com" />
+      </div>
+
+      <div class="form-group">
+        <label>Proof File (PDF)</label>
+        <input type="file" id="modalProofFile" accept=".pdf" />
+      </div>
+
+      <div class="modal-actions">
+        <button class="close-modal" onclick="closeSendProofModal()">Cancel</button>
+        <button class="success" onclick="submitProof()">Send Proof</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000/api';
+    let dashboardData = { waitingForDesign: [], proofsSent: [], approvedReady: [] };
+    let draggedJob = null;
+
+    // Load dashboard on page load
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+
+    // Utility functions
+    async function loadDashboard() {
+      try {
+        const response = await fetch(`${API_BASE}/dashboard`);
+        dashboardData = await response.json();
+        renderDashboard();
+      } catch (err) {
+        console.error('Error loading dashboard:', err);
+      }
+    }
+
+    function renderDashboard() {
+      // Waiting for Design
+      const designHTML = dashboardData.waitingForDesign.map(job => createJobCard(job, 'design')).join('');
+      document.getElementById('waiting-design-jobs').innerHTML = designHTML || '';
+      document.getElementById('design-empty').style.display = designHTML ? 'none' : 'block';
+      document.getElementById('design-count').textContent = dashboardData.waitingForDesign.length;
+
+      // Proofs Sent
+      const proofHTML = dashboardData.proofsSent.map(job => createJobCard(job, 'proof')).join('');
+      document.getElementById('proofs-sent-jobs').innerHTML = proofHTML || '';
+      document.getElementById('proof-empty').style.display = proofHTML ? 'none' : 'block';
+      document.getElementById('proof-count').textContent = dashboardData.proofsSent.length;
+
+      // Approved & Ready
+      const readyHTML = dashboardData.approvedReady.map(job => createJobCard(job, 'ready')).join('');
+      document.getElementById('approved-ready-jobs').innerHTML = readyHTML || '';
+      document.getElementById('ready-empty').style.display = readyHTML ? 'none' : 'block';
+      document.getElementById('ready-count').textContent = dashboardData.approvedReady.length;
+    }
+
+    function createJobCard(job, section) {
+      const warningClass = job.warningLevel === 'critical' ? 'critical' : job.warningLevel === 'warning' ? 'warning' : '';
+      const daysClass = job.warningLevel === 'critical' ? 'critical' : job.warningLevel === 'warning' ? 'warning' : '';
+      const badge = job.warningLevel === 'critical' ? '<div class="badge urgent">⚠️ OVERDUE</div>' : job.warningLevel === 'warning' ? '<div class="badge warning">⏰ Warning</div>' : '';
+
+      return `
+        <div class="job-card ${warningClass}" draggable="true" ondragstart="dragStart(event, '${job.id}', '${section}')" data-job-id="${job.id}">
+          <div class="job-number">#${job.jobNumber}</div>
+          <div class="job-customer">${job.customerName}</div>
+          <div class="job-meta">
+            <span class="days-waiting ${daysClass}">${job.daysWaiting} days</span>
+            <span class="job-value">$${job.amount.toFixed(2)}</span>
+          </div>
+          ${badge}
+        </div>
+      `;
+    }
+
+    // Drag & Drop
+    function dragStart(event, jobId, section) {
+      draggedJob = { id: jobId, section };
+      event.dataTransfer.effectAllowed = 'move';
+    }
+
+    function dragOver(event) {
+      event.preventDefault();
+      event.currentTarget.classList.add('drag-over');
+    }
+
+    function dragLeave(event) {
+      event.currentTarget.classList.remove('drag-over');
+    }
+
+    async function allowDrop(event, targetSection) {
+      event.preventDefault();
+      event.currentTarget.classList.remove('drag-over');
+
+      if (!draggedJob) return;
+
+      const newStatus = targetSection === 'design' ? 'Tim Art' : targetSection === 'proof' ? 'On Proof' : 'GP to Print';
+
+      try {
+        await fetch(`${API_BASE}/jobs/${draggedJob.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+        });
+
+        draggedJob = null;
+        await loadDashboard();
+      } catch (err) {
+        console.error('Error updating job:', err);
+      }
+    }
+
+    // CSV Upload
+    async function uploadCSV() {
+      const fileInput = document.getElementById('csvFile');
+      if (!fileInput.files.length) {
+        alert('Please select a CSV file');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      try {
+        const response = await fetch(`${API_BASE}/jobs/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        const result = await response.json();
+        alert(`✓ Imported ${result.jobsImported} jobs`);
+        fileInput.value = '';
+        await loadDashboard();
+      } catch (err) {
+        alert(`Error: ${err.message}`);
+      }
+    }
+
+    // Send Proof
+    function toggleSendProofModal() {
+      document.getElementById('sendProofModal').classList.add('active');
+    }
+
+    function closeSendProofModal() {
+      document.getElementById('sendProofModal').classList.remove('active');
+    }
+
+    async function sendProof(event) {
+      event.preventDefault();
+
+      const formData = new FormData();
+      const proofFile = document.getElementById('proofFile').files[0];
+      const jobNumber = document.getElementById('proofJobNumber').value;
+
+      if (!proofFile) {
+        showError('proof-error', 'Please select a proof file');
+        return;
+      }
+
+      formData.append('file', proofFile);
+      formData.append('jobNumber', jobNumber);
+      formData.append('clientEmail', document.getElementById('proofClientEmail').value);
+      formData.append('version', document.getElementById('proofVersion').value);
+
+      try {
+        const response = await fetch(`${API_BASE}/proofs`, {
+          method: 'POST',
+          body: formData
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          showSuccess('proof-success', `✓ Proof sent! Link: ${result.proofUrl}`);
+          document.getElementById('proofJobNumber').value = '';
+          document.getElementById('proofClientEmail').value = '';
+          document.getElementById('proofFile').value = '';
+          setTimeout(() => {
+            document.getElementById('proof-success').classList.remove('show');
+            loadDashboard();
+          }, 3000);
+        }
+      } catch (err) {
+        showError('proof-error', `Error: ${err.message}`);
+      }
+    }
+
+    function showSuccess(elementId, message) {
+      const el = document.getElementById(elementId);
+      el.textContent = message;
+      el.classList.add('show');
+    }
+
+    function showError(elementId, message) {
+      const el = document.getElementById(elementId);
+      el.textContent = message;
+      el.classList.add('show');
+    }
+
+    // Tab switching
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+
+      if (tab === 'dashboard') {
+        document.getElementById('dashboard-tab').style.display = 'block';
+        document.querySelector('[onclick="switchTab(\'dashboard\')"]').classList.add('active');
+      } else if (tab === 'send-proof') {
+        document.getElementById('send-proof-tab').style.display = 'block';
+        document.querySelector('[onclick="switchTab(\'send-proof\')"]').classList.add('active');
+      }
+    }
+
+    // Auto-refresh dashboard every 30 seconds
+    setInterval(loadDashboard, 30000);
+  </script>
+</body>
+</html>
