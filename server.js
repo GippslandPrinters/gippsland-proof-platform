@@ -13,7 +13,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
-   app.use(express.static('./public'));
+app.use(express.static('.'))
 // Setup multer for file uploads
 const upload = multer({ dest: 'uploads/' });
 // Initialize SQLite database
