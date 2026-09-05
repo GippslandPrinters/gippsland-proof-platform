@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Approve Your Proof - Gippsland Printers</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #5a3e36;
+      --secondary: #8b7355;
+      --success: #27ae60;
+      --danger: #e74c3c;
+      --light: #ecf0f1;
+      --dark: #2c3e50;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+      color: var(--dark);
+      line-height: 1.6;
+    }
+
+    .header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .header h1 {
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .proof-viewer {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      overflow: hidden;
+      min-height: 600px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .proof-frame {
+      width: 100%;
+      height: 100%;
+      min-height: 600px;
+      border: none;
+    }
+
+    .sidebar {
+      background: white;
+      border-radius: 8px;
+      padding: 25px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      height: fit-content;
+    }
+
+    .sidebar h3 {
+      margin-bottom: 15px;
+      color: var(--dark);
+      font-size: 16px;
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 10px;
+    }
+
+    .info-item {
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+
+    .info-label {
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+
+    .info-value {
+      color: var(--dark);
+    }
+
+    .actions {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .approve-btn {
+      background: var(--success);
+      color: white;
+    }
+
+    .approve-btn:hover {
+      background: #229954;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+    }
+
+    .reject-btn {
+      background: var(--light);
+      color: var(--dark);
+      border: 2px solid var(--danger);
+    }
+
+    .reject-btn:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+
+    .modal h2 {
+      margin-bottom: 15px;
+      color: var(--dark);
+    }
+
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 14px;
+      min-height: 100px;
+      margin-bottom: 15px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .modal-actions button {
+      flex: 1;
+    }
+
+    .cancel-btn {
+      background: var(--light);
+      color: var(--dark);
+    }
+
+    .cancel-btn:hover {
+      background: var(--dark);
+      color: white;
+    }
+
+    .success-message {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      display: none;
+      text-align: center;
+    }
+
+    .success-message.show {
+      display: block;
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 600px;
+      color: var(--secondary);
+      font-size: 18px;
+    }
+
+    .error-message {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      .content {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        flex-direction: column;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+
+    .version-info {
+      background: var(--light);
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--secondary);
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📋 Proof Approval</h1>
+    <p>Gippsland Printers - Review and approve your proof</p>
+  </div>
+
+  <div class="container">
+    <div class="error-message" id="errorMessage"></div>
+    <div class="success-message" id="successMessage">
+      ✓ Thank you! Your approval has been recorded. We'll begin production shortly.
+    </div>
+
+    <div class="content">
+      <div class="proof-viewer">
+        <div class="loading" id="loading">Loading proof...</div>
+        <iframe id="proofFrame" class="proof-frame" style="display: none;"></iframe>
+      </div>
+
+      <div class="sidebar">
+        <h3>Job Details</h3>
+        <div class="info-item">
+          <div class="info-label">Job Number</div>
+          <div class="info-value" id="jobNumber">—</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Status</div>
+          <div class="info-value" id="proofStatus">Awaiting Approval</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Proof Version</div>
+          <div class="info-value" id="proofVersion">—</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Sent On</div>
+          <div class="info-value" id="sentOn">—</div>
+        </div>
+
+        <div class="version-info">
+          📝 Please review carefully. If you need any changes, click "Request Changes" below.
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="approve-btn" onclick="approveProof()">✓ Approve This Proof</button>
+      <button class="reject-btn" onclick="showRejectModal()">✗ Request Changes</button>
+    </div>
+  </div>
+
+  <!-- Reject Modal -->
+  <div id="rejectModal" class="modal">
+    <div class="modal-content">
+      <h2>Request Changes</h2>
+      <p style="margin-bottom: 15px; color: #666;">Tell us what needs to be adjusted:</p>
+      <textarea id="changeNotes" placeholder="E.g., Change the blue to darker shade, adjust the logo size, etc."></textarea>
+      <div class="modal-actions">
+        <button class="cancel-btn" onclick="closeRejectModal()">Cancel</button>
+        <button class="reject-btn" onclick="submitReject()">Send Feedback</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000/api';
+    let proofId = null;
+    let proofData = null;
+
+    // Get proof ID from URL
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      proofId = window.location.pathname.split('/').pop();
+
+      if (proofId) {
+        loadProof();
+      } else {
+        showError('No proof ID provided');
+      }
+    });
+
+    async function loadProof() {
+      try {
+        // Fetch proof metadata
+        const response = await fetch(`${API_BASE}/proofs/${proofId}`);
+
+        if (!response.ok) {
+          throw new Error('Proof not found');
+        }
+
+        // Display PDF in iframe
+        const blobUrl = URL.createObjectURL(await response.blob());
+        document.getElementById('proofFrame').src = blobUrl;
+        document.getElementById('proofFrame').style.display = 'block';
+        document.getElementById('loading').style.display = 'none';
+
+        // Update sidebar info (would need API endpoint to fetch metadata)
+        document.getElementById('jobNumber').textContent = 'Job #' + (proofId || '—');
+        document.getElementById('proofVersion').textContent = '1';
+        const now = new Date();
+        document.getElementById('sentOn').textContent = now.toLocaleDateString();
+      } catch (err) {
+        showError(err.message);
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+
+    async function approveProof() {
+      try {
+        const response = await fetch(`${API_BASE}/proofs/${proofId}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          document.getElementById('successMessage').classList.add('show');
+          document.getElementById('proofStatus').textContent = '✓ Approved';
+          document.querySelector('.actions').style.display = 'none';
+        } else {
+          showError(result.error || 'Error approving proof');
+        }
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    function showRejectModal() {
+      document.getElementById('rejectModal').classList.add('active');
+    }
+
+    function closeRejectModal() {
+      document.getElementById('rejectModal').classList.remove('active');
+      document.getElementById('changeNotes').value = '';
+    }
+
+    async function submitReject() {
+      const reason = document.getElementById('changeNotes').value;
+
+      if (!reason.trim()) {
+        alert('Please describe what changes you need');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/proofs/${proofId}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          closeRejectModal();
+          document.getElementById('successMessage').textContent =
+            '✓ Thank you! Your feedback has been sent to the design team. We\'ll send you a revised proof shortly.';
+          document.getElementById('successMessage').classList.add('show');
+          document.getElementById('proofStatus').textContent = 'Changes Requested';
+          document.querySelector('.actions').style.display = 'none';
+        } else {
+          showError(result.error || 'Error submitting feedback');
+        }
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    function showError(message) {
+      const el = document.getElementById('errorMessage');
+      el.textContent = '❌ ' + message;
+      el.classList.add('show');
+    }
+  </script>
+</body>
+</html>
