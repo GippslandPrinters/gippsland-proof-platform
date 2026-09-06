@@ -18,10 +18,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-bash
-git add server.js
-git commit -m "Add root route handler for dashboard"
-git push
 // Setup multer for file uploads
 const upload = multer({ dest: 'uploads/' });
 // Initialize SQLite database
