@@ -24,7 +24,20 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 // Fallback route for root path
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head><title>Gippsland Proof Platform</title></head>
+    <body>
+      <h1>Gippsland Proof Platform</h1>
+      <p>Dashboard is running. Redirecting...</p>
+      <script>
+        // Temporarily show this, then load the actual dashboard
+        setTimeout(() => { window.location.href = '/public/index.html'; }, 2000);
+      </script>
+    </body>
+    </html>
+  `);
 });
 // Setup multer for file uploads
 const upload = multer({ dest: 'uploads/' });
