@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gippsland Proof Platform</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    header {
+      background: #1e3a5f;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 28px;
+      margin-bottom: 5px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .send-proof-section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 30px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .send-proof-section h2 {
+      margin-bottom: 20px;
+      color: #1e3a5f;
+      font-size: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+      color: #555;
+    }
+
+    select, input[type="email"], input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    select:focus, input:focus {
+      outline: none;
+      border-color: #1e3a5f;
+      box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.1);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    @media (max-width: 768px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #1e3a5f;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #152848;
+    }
+
+    .btn-primary:disabled {
+      background: #999;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #e0e0e0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #d0d0d0;
+    }
+
+    .message {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      display: block;
+      border: 1px solid #c3e6cb;
+    }
+
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      display: block;
+      border: 1px solid #f5c6cb;
+    }
+
+    .approval-link-box {
+      background: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      margin-top: 15px;
+      display: none;
+    }
+
+    .approval-link-box.show {
+      display: block;
+    }
+
+    .approval-link-box h3 {
+      color: #155724;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .link-input {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .link-input input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+      word-break: break-all;
+      font-family: monospace;
+    }
+
+    .link-input button {
+      padding: 10px 15px;
+      background: #1e3a5f;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .jobs-section {
+      margin-top: 30px;
+    }
+
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 1024px) {
+      .columns {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .columns {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .column {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .column h3 {
+      margin-bottom: 15px;
+      color: #1e3a5f;
+      font-size: 16px;
+    }
+
+    .job-card {
+      background: #f9f9f9;
+      border-left: 4px solid #1e3a5f;
+      padding: 15px;
+      margin-bottom: 12px;
+      border-radius: 4px;
+      cursor: grab;
+    }
+
+    .job-card:active {
+      cursor: grabbing;
+    }
+
+    .job-card-title {
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    .job-card-desc {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .job-card-days {
+      font-size: 12px;
+      padding: 5px 10px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .days-0-2 {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .days-3-4 {
+      background: #fff3e0;
+      color: #e65100;
+    }
+
+    .days-5plus {
+      background: #ffebee;
+      color: #c62828;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #999;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #1e3a5f;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📋 Gippsland Proof Platform</h1>
+    <p>Manage proof approvals and job workflow</p>
+  </header>
+
+  <div class="container">
+    <!-- Send Proof Section -->
+    <div class="send-proof-section">
+      <h2>Send Proof to Customer</h2>
+
+      <form id="sendProofForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="jobSelect">Select Job</label>
+            <select id="jobSelect" required>
+              <option value="">-- Choose a job --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="proofFile">Upload Proof PDF</label>
+            <input type="file" id="proofFile" accept=".pdf" required>
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button type="submit" class="btn-primary">Send Proof to Customer</button>
+          <button type="reset" class="btn-secondary">Clear</button>
+        </div>
+
+        <div id="message" class="message"></div>
+
+        <div id="approvalLinkBox" class="approval-link-box">
+          <h3>✅ Proof Sent Successfully!</h3>
+          <p style="font-size: 13px; margin-bottom: 10px;">Share this approval link with your customer:</p>
+          <div class="link-input">
+            <input type="text" id="approvalLink" readonly>
+            <button type="button" onclick="copyToClipboard()">Copy Link</button>
+          </div>
+          <p style="font-size: 12px; color: #666;">The customer will receive an email with this link and can approve or request changes.</p>
+        </div>
+      </form>
+    </div>
+
+    <!-- Jobs Dashboard Section -->
+    <div class="jobs-section">
+      <h2 style="color: #1e3a5f; margin-bottom: 10px;">📊 Job Status Dashboard</h2>
+      <p style="color: #666; margin-bottom: 20px; font-size: 14px;">Current job workflow status (refreshes every 30 seconds)</p>
+
+      <div class="columns">
+        <div class="column">
+          <h3>⏳ Waiting for Design</h3>
+          <div id="waiting" class="jobs-list"></div>
+        </div>
+
+        <div class="column">
+          <h3>📤 Proofs Sent</h3>
+          <div id="proofsSent" class="jobs-list"></div>
+        </div>
+
+        <div class="column">
+          <h3>✅ Approved & Ready</h3>
+          <div id="approved" class="jobs-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Load jobs for dropdown
+    async function loadJobsForDropdown() {
+      try {
+        const response = await fetch('/api/jobs');
+        const data = await response.json();
+        const jobSelect = document.getElementById('jobSelect');
+
+        jobSelect.innerHTML = '<option value="">-- Choose a job --</option>';
+
+        if (data.jobs && data.jobs.length > 0) {
+          data.jobs.forEach(job => {
+            const option = document.createElement('option');
+            option.value = job.jobId;
+            option.textContent = `${job.jobId} - ${job.customer}`;
+            jobSelect.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading jobs:', error);
+      }
+    }
+
+    // Load dashboard
+    async function loadDashboard() {
+      try {
+        const response = await fetch('/api/jobs');
+        const data = await response.json();
+
+        const waiting = document.getElementById('waiting');
+        const proofsSent = document.getElementById('proofsSent');
+        const approved = document.getElementById('approved');
+
+        waiting.innerHTML = '';
+        proofsSent.innerHTML = '';
+        approved.innerHTML = '';
+
+        if (!data.jobs || data.jobs.length === 0) {
+          waiting.innerHTML = '<div class="loading">No jobs yet</div>';
+          return;
+        }
+
+        data.jobs.forEach(job => {
+          const card = createJobCard(job);
+
+          if (job.status === 'approved') {
+            approved.appendChild(card);
+          } else if (job.proofCount > 0) {
+            proofsSent.appendChild(card);
+          } else {
+            waiting.appendChild(card);
+          }
+        });
+      } catch (error) {
+        console.error('Error loading dashboard:', error);
+      }
+    }
+
+    function createJobCard(job) {
+      const card = document.createElement('div');
+      card.className = 'job-card';
+
+      const createdDate = new Date(job.createdAt);
+      const daysWaiting = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
+
+      let daysClass = 'days-0-2';
+      if (daysWaiting >= 5) daysClass = 'days-5plus';
+      else if (daysWaiting >= 3) daysClass = 'days-3-4';
+
+      card.innerHTML = `
+        <div class="job-card-title">${job.jobId}</div>
+        <div class="job-card-desc">${job.customer}</div>
+        <div class="job-card-days ${daysClass}">${daysWaiting} days waiting</div>
+      `;
+
+      return card;
+    }
+
+    // Handle form submission
+    document.getElementById('sendProofForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const jobId = document.getElementById('jobSelect').value;
+      const proofFile = document.getElementById('proofFile').files[0];
+      const messageDiv = document.getElementById('message');
+      const approvalLinkBox = document.getElementById('approvalLinkBox');
+
+      if (!jobId || !proofFile) {
+        showMessage('Please select a job and upload a proof file', 'error');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('proof', proofFile);
+
+      try {
+        const response = await fetch(`/api/jobs/${jobId}/send-proof`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showMessage('✅ Proof sent successfully to customer!', 'success');
+          document.getElementById('approvalLink').value = data.approvalLink;
+          approvalLinkBox.classList.add('show');
+          document.getElementById('proofFile').value = '';
+          document.getElementById('jobSelect').value = '';
+          loadDashboard();
+        } else {
+          showMessage(`Error: ${data.error}`, 'error');
+        }
+      } catch (error) {
+        showMessage(`Error uploading proof: ${error.message}`, 'error');
+      }
+    });
+
+    function showMessage(text, type) {
+      const messageDiv = document.getElementById('message');
+      messageDiv.textContent = text;
+      messageDiv.className = `message ${type}`;
+    }
+
+    function copyToClipboard() {
+      const link = document.getElementById('approvalLink');
+      link.select();
+      document.execCommand('copy');
+      alert('Approval link copied to clipboard!');
+    }
+
+    // Initial load and auto-refresh
+    loadJobsForDropdown();
+    loadDashboard();
+    setInterval(loadDashboard, 30000);
+  </script>
+</body>
+</html>
