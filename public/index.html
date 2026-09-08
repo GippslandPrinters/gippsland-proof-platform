@@ -317,6 +317,13 @@
           </div>
 
           <div class="form-group">
+            <label for="customerEmail">Customer Email</label>
+            <input type="email" id="customerEmail" placeholder="customer@example.com" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
             <label for="proofFile">Upload Proof PDF</label>
             <input type="file" id="proofFile" accept=".pdf" required>
           </div>
@@ -448,17 +455,19 @@
       e.preventDefault();
 
       const jobId = document.getElementById('jobSelect').value;
+      const customerEmail = document.getElementById('customerEmail').value;
       const proofFile = document.getElementById('proofFile').files[0];
       const messageDiv = document.getElementById('message');
       const approvalLinkBox = document.getElementById('approvalLinkBox');
 
-      if (!jobId || !proofFile) {
-        showMessage('Please select a job and upload a proof file', 'error');
+      if (!jobId || !customerEmail || !proofFile) {
+        showMessage('Please select a job, enter customer email, and upload a proof file', 'error');
         return;
       }
 
       const formData = new FormData();
       formData.append('proof', proofFile);
+      formData.append('customerEmail', customerEmail);
 
       try {
         const response = await fetch(`/api/jobs/${jobId}/send-proof`, {
@@ -469,11 +478,12 @@
         const data = await response.json();
 
         if (response.ok) {
-          showMessage('✅ Proof sent successfully to customer!', 'success');
+          showMessage('✅ Proof sent successfully to customer! Email is being sent...', 'success');
           document.getElementById('approvalLink').value = data.approvalLink;
           approvalLinkBox.classList.add('show');
           document.getElementById('proofFile').value = '';
           document.getElementById('jobSelect').value = '';
+          document.getElementById('customerEmail').value = '';
           loadDashboard();
         } else {
           showMessage(`Error: ${data.error}`, 'error');

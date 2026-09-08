@@ -170,9 +170,14 @@ app.get('/api/jobs/:jobId', (req, res) => {
 // Send proof - Upload PDF and generate approval link
 app.post('/api/jobs/:jobId/send-proof', upload.single('proof'), (req, res) => {
   const { jobId } = req.params;
+  const { customerEmail } = req.body;
 
   if (!req.file) {
     return res.status(400).json({ error: 'No proof file provided' });
+  }
+
+  if (!customerEmail) {
+    return res.status(400).json({ error: 'Customer email is required' });
   }
 
   // Generate unique approval token
@@ -202,19 +207,48 @@ app.post('/api/jobs/:jobId/send-proof', upload.single('proof'), (req, res) => {
             event: 'proof_sent',
             jobId: jobId,
             customer: job.customer,
-            email: job.email,
+            email: customerEmail,
             description: job.description,
             approvalLink: approvalLink,
             timestamp: new Date().toISOString()
           };
 
-          res.json({
-            success: true,
-            message: 'Proof uploaded successfully',
-            approvalToken: approvalToken,
-            approvalLink: approvalLink,
-            webhook: webhookData
+          // Send webhook to Zapier
+          const https = require('https');
+          const zapierUrl = 'https://hooks.zapier.com/hooks/catch/28758004/4he15ub/';
+
+          const options = {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          };
+
+          const zapierReq = https.request(zapierUrl, options, (zapierRes) => {
+            // Webhook sent, respond to client regardless
+            res.json({
+              success: true,
+              message: 'Proof uploaded and email sent successfully',
+              approvalToken: approvalToken,
+              approvalLink: approvalLink,
+              emailSent: true
+            });
           });
+
+          zapierReq.on('error', (error) => {
+            console.error('Zapier webhook error:', error);
+            // Still respond with success - webhook failure shouldn't block the upload
+            res.json({
+              success: true,
+              message: 'Proof uploaded successfully (email queued)',
+              approvalToken: approvalToken,
+              approvalLink: approvalLink,
+              emailSent: false
+            });
+          });
+
+          zapierReq.write(JSON.stringify(webhookData));
+          zapierReq.end();
         });
       }
     }
