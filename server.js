@@ -1,4 +1,5 @@
 const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -8,46 +9,29 @@ const nodemailer = require('nodemailer');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-console.log('=== Gippsland Proof Platform Starting ===');
-console.log('PORT:', PORT);
-console.log('EMAIL_USER configured:', !!process.env.EMAIL_USER);
-
-// Configure email transporter only if credentials are set
-let transporter = null;
-if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
-  try {
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
-      }
-    });
-    console.log('✓ Email transporter configured');
-  } catch (err) {
-    console.error('Email config error:', err.message);
+// Configure email transporter
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
+    pass: process.env.EMAIL_PASSWORD || ''
   }
-} else {
-  console.log('⚠ Email credentials not set - emails disabled');
-}
+});
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
-try {
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-  console.log('✓ Uploads directory ready');
-} catch (err) {
-  console.error('Upload dir error:', err.message);
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
   filename: (req, file, cb) => {
-    const name = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${path.extname(file.originalname)}`;
-    cb(null, name);
+    const uniqueName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
   }
 });
 
@@ -67,122 +51,62 @@ app.use(express.json());
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 
-// Simple in-memory proof storage
-const proofStorage = new Map();
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// Send proof
-app.post('/api/send-proof', upload.single('proof'), (req, res) => {
-  try {
-    const { customerName, customerEmail, jobDetails } = req.body;
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'No proof file provided' });
-    }
-    if (!customerName || !customerEmail || !jobDetails) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    const approvalToken = crypto.randomBytes(16).toString('hex');
-    const approvalLink = `${req.protocol}://${req.get('host')}/approve/${approvalToken}`;
-
-    // Store proof data
-    proofStorage.set(approvalToken, {
-      customerName,
-      customerEmail,
-      jobDetails,
-      fileName: req.file.filename,
-      filePath: req.file.path,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    });
-
-    // Send response immediately
-    res.json({
-      success: true,
-      message: 'Proof uploaded' + (transporter ? ' - email queued' : ''),
-      approvalToken,
-      approvalLink,
-      emailSent: transporter ? true : false
-    });
-
-    // Send email in background
-    if (transporter) {
-      setImmediate(() => {
-        const mailOptions = {
-          from: process.env.EMAIL_USER,
-          to: customerEmail,
-          subject: `Proof Approval Request - ${jobDetails}`,
-          html: `
-            <h2>Proof Approval Required</h2>
-            <p>Hello ${customerName},</p>
-            <p>Your proof for <strong>${jobDetails}</strong> is ready for approval.</p>
-            <p><a href="${approvalLink}" style="background-color: #1e3a5f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">Review & Approve</a></p>
-            <p>Or visit: <code>${approvalLink}</code></p>
-            <p>Thank you,<br/>Gippsland Printers</p>
-          `
-        };
-
-        transporter.sendMail(mailOptions, (err, info) => {
-          if (err) {
-            console.error('Email error:', err.message);
-          } else {
-            console.log('Email sent to:', customerEmail);
-          }
-        });
-      });
-    }
-  } catch (err) {
-    console.error('Send proof error:', err.message);
-    res.status(500).json({ error: err.message });
+// Initialize SQLite database
+const db = new sqlite3.Database(':memory:', (err) => {
+  if (err) {
+    console.error('Database error:', err);
+  } else {
+    console.log('Connected to SQLite database');
   }
 });
 
-// Get proof details
-app.get('/api/approve/:token', (req, res) => {
-  const proof = proofStorage.get(req.params.token);
-  if (!proof) {
-    return res.status(404).json({ error: 'Proof not found' });
-  }
-  res.json(proof);
-});
+// Create tables
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      jobId TEXT PRIMARY KEY,
+      customer TEXT NOT NULL,
+      email TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'waiting',
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (err) => {
+    if (err) console.error('Error creating jobs table:', err);
+  });
 
-// Submit approval/rejection
-app.post('/api/approve/:token', express.json(), (req, res) => {
-  const proof = proofStorage.get(req.params.token);
-  if (!proof) {
-    return res.status(404).json({ error: 'Proof not found' });
-  }
+  db.run(`
+    CREATE TABLE IF NOT EXISTS proofs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      jobId TEXT NOT NULL,
+      fileName TEXT NOT NULL,
+      filePath TEXT NOT NULL,
+      approvalToken TEXT UNIQUE NOT NULL,
+      version INTEGER DEFAULT 1,
+      status TEXT DEFAULT 'pending',
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(jobId) REFERENCES jobs(jobId)
+    )
+  `, (err) => {
+    if (err) console.error('Error creating proofs table:', err);
+  });
 
-  const { action, feedback } = req.body;
-  if (!['approve', 'reject'].includes(action)) {
-    return res.status(400).json({ error: 'Invalid action' });
-  }
-
-  proof.status = action;
-  proof.feedback = feedback;
-  proof.approvedAt = new Date().toISOString();
-
-  res.json({ success: true, message: `Proof ${action}ed` });
-
-  // Send notification email
-  if (transporter) {
-    setImmediate(() => {
-      transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: 'info@gippslandprinters.com.au',
-        subject: `Proof ${action.toUpperCase()} - ${proof.jobDetails}`,
-        html: `<h2>Proof ${action.toUpperCase()}</h2><p>${proof.customerName} ${action}ed the proof.</p>${feedback ? `<p>Feedback: ${feedback}</p>` : ''}`
-      }, (err) => {
-        if (err) console.error('Notification error:', err.message);
-        else console.log('Notification sent');
-      });
-    });
-  }
+  // Seed test data
+  const now = new Date().toISOString();
+  db.run(
+    'INSERT OR IGNORE INTO jobs (jobId, customer, email, description, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+    ['TEST001', 'Nathan Test', 'test@gippslandprinters.com.au', 'Test Proof Job', 'waiting', now],
+    (err) => {
+      if (err) console.error('Error seeding TEST001:', err);
+    }
+  );
+  db.run(
+    'INSERT OR IGNORE INTO jobs (jobId, customer, email, description, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+    ['TEST002', 'Another Customer', 'another@test.com', 'Design Approval', 'waiting', now],
+    (err) => {
+      if (err) console.error('Error seeding TEST002:', err);
+    }
+  );
 });
 
 // Root route
@@ -190,8 +114,228 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Approve page route
+app.get('/approve/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'approve.html'));
+});
+
+// API endpoints
+
+// Get all jobs
+app.get('/api/jobs', (req, res) => {
+  db.all(`
+    SELECT j.*, COUNT(p.id) as proofCount
+    FROM jobs j
+    LEFT JOIN proofs p ON j.jobId = p.jobId
+    GROUP BY j.jobId
+  `, (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.json({ jobs: rows || [] });
+    }
+  });
+});
+
+// Create new job
+app.post('/api/jobs', express.json(), (req, res) => {
+  const { jobId, customer, email, description } = req.body;
+
+  if (!jobId || !customer || !email) {
+    return res.status(400).json({ error: 'jobId, customer, and email are required' });
+  }
+
+  db.run(
+    'INSERT INTO jobs (jobId, customer, email, description) VALUES (?, ?, ?, ?)',
+    [jobId, customer, email, description],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+      } else {
+        res.json({
+          success: true,
+          jobId: jobId,
+          message: 'Job created successfully'
+        });
+      }
+    }
+  );
+});
+
+// Get job details
+app.get('/api/jobs/:jobId', (req, res) => {
+  const { jobId } = req.params;
+
+  db.get('SELECT * FROM jobs WHERE jobId = ?', [jobId], (err, job) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+    } else if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+    } else {
+      res.json(job);
+    }
+  });
+});
+
+// Send proof - Upload PDF and generate approval link with direct email
+app.post('/api/send-proof', upload.single('proof'), (req, res) => {
+  const { customerName, customerEmail, jobDetails } = req.body;
+  const jobId = `PROOF_${Date.now()}`; // Generate unique job ID
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No proof file provided' });
+  }
+
+  if (!customerName || !customerEmail || !jobDetails) {
+    return res.status(400).json({ error: 'Customer name, email, and job details are required' });
+  }
+
+  // Generate unique approval token
+  const approvalToken = crypto.randomBytes(16).toString('hex');
+  const filePath = req.file.path;
+  const fileName = req.file.filename;
+
+  // Insert proof record into database
+  db.run(
+    'INSERT INTO proofs (jobId, fileName, filePath, approvalToken, status) VALUES (?, ?, ?, ?, ?)',
+    [jobId, fileName, filePath, approvalToken, 'pending'],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+      } else {
+        // Generate approval link
+        const approvalLink = `${req.protocol}://${req.get('host')}/approve/${approvalToken}`;
+
+        // Send response to client immediately
+        res.json({
+          success: true,
+          message: 'Proof uploaded and email sent successfully',
+          approvalToken: approvalToken,
+          approvalLink: approvalLink,
+          emailSent: true
+        });
+
+        // Send email in background (non-blocking)
+        setImmediate(() => {
+          const mailOptions = {
+            from: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
+            to: customerEmail,
+            subject: `Proof Approval Request - ${jobDetails}`,
+            html: `
+              <h2>Proof Approval Required</h2>
+              <p>Hello ${customerName},</p>
+              <p>Your proof for <strong>${jobDetails}</strong> is ready for approval.</p>
+              <p>Please review the attached proof and approve or request changes using the link below:</p>
+              <p>
+                <a href="${approvalLink}" style="background-color: #1e3a5f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Review & Approve Proof
+                </a>
+              </p>
+              <p>Or copy and paste this link into your browser:</p>
+              <p><code>${approvalLink}</code></p>
+              <p>Thank you,<br/>Gippsland Printers Team</p>
+            `
+          };
+
+          transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+              console.error('Email error:', error);
+            } else {
+              console.log('Email sent successfully:', info.response);
+            }
+          });
+        });
+      }
+    }
+  );
+});
+
+// Get proof details for client (using approval token)
+app.get('/api/approve/:token', (req, res) => {
+  const { token } = req.params;
+
+  db.get(`
+    SELECT p.*
+    FROM proofs p
+    WHERE p.approvalToken = ?
+  `, [token], (err, proof) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+    } else if (!proof) {
+      res.status(404).json({ error: 'Proof not found' });
+    } else {
+      res.json(proof);
+    }
+  });
+});
+
+// Process client approval/rejection
+app.post('/api/approve/:token', express.json(), (req, res) => {
+  const { token } = req.params;
+  const { action, feedback } = req.body;
+
+  if (!action || !['approve', 'reject'].includes(action)) {
+    return res.status(400).json({ error: 'action must be "approve" or "reject"' });
+  }
+
+  // Get proof details
+  db.get('SELECT * FROM proofs WHERE approvalToken = ?', [token], (err, proof) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!proof) {
+      return res.status(404).json({ error: 'Proof not found' });
+    }
+
+    // Update proof status
+    const newStatus = action === 'approve' ? 'approved' : 'rejected';
+    db.run(
+      'UPDATE proofs SET status = ? WHERE approvalToken = ?',
+      [newStatus, token],
+      function(err) {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+
+        res.json({
+          success: true,
+          message: `Proof ${newStatus} recorded`
+        });
+
+        // Send notification email in background
+        setImmediate(() => {
+          const mailOptions = {
+            from: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
+            to: 'info@gippslandprinters.com.au',
+            subject: `Proof ${newStatus.toUpperCase()} - Job ${proof.jobId}`,
+            html: `
+              <h2>Proof ${newStatus.toUpperCase()}</h2>
+              <p><strong>Job ID:</strong> ${proof.jobId}</p>
+              <p><strong>Status:</strong> ${newStatus}</p>
+              ${feedback ? `<p><strong>Feedback:</strong> ${feedback}</p>` : ''}
+              <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+            `
+          };
+
+          transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+              console.error('Notification email error:', error);
+            } else {
+              console.log('Notification email sent:', info.response);
+            }
+          });
+        });
+      }
+    );
+  });
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK' });
+});
+
 // Start server
 app.listen(PORT, () => {
-  console.log(`✓ Server running on port ${PORT}`);
-  console.log(`✓ Ready at http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
