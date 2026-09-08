@@ -9,14 +9,20 @@ const nodemailer = require('nodemailer');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Configure email transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
-    pass: process.env.EMAIL_PASSWORD || ''
-  }
-});
+// Configure email transporter - only if credentials are set
+let transporter = null;
+if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    }
+  });
+  console.log('Email transporter configured with:', process.env.EMAIL_USER);
+} else {
+  console.log('Warning: EMAIL_USER and EMAIL_PASSWORD not set - emails will not be sent');
+}
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -209,42 +215,44 @@ app.post('/api/send-proof', upload.single('proof'), (req, res) => {
         // Send response to client immediately
         res.json({
           success: true,
-          message: 'Proof uploaded and email sent successfully',
+          message: 'Proof uploaded' + (transporter ? ' and email sent' : ' (email not configured)'),
           approvalToken: approvalToken,
           approvalLink: approvalLink,
-          emailSent: true
+          emailSent: transporter ? true : false
         });
 
-        // Send email in background (non-blocking)
-        setImmediate(() => {
-          const mailOptions = {
-            from: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
-            to: customerEmail,
-            subject: `Proof Approval Request - ${jobDetails}`,
-            html: `
-              <h2>Proof Approval Required</h2>
-              <p>Hello ${customerName},</p>
-              <p>Your proof for <strong>${jobDetails}</strong> is ready for approval.</p>
-              <p>Please review the attached proof and approve or request changes using the link below:</p>
-              <p>
-                <a href="${approvalLink}" style="background-color: #1e3a5f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                  Review & Approve Proof
-                </a>
-              </p>
-              <p>Or copy and paste this link into your browser:</p>
-              <p><code>${approvalLink}</code></p>
-              <p>Thank you,<br/>Gippsland Printers Team</p>
-            `
-          };
+        // Send email in background (non-blocking) - only if transporter is configured
+        if (transporter) {
+          setImmediate(() => {
+            const mailOptions = {
+              from: process.env.EMAIL_USER,
+              to: customerEmail,
+              subject: `Proof Approval Request - ${jobDetails}`,
+              html: `
+                <h2>Proof Approval Required</h2>
+                <p>Hello ${customerName},</p>
+                <p>Your proof for <strong>${jobDetails}</strong> is ready for approval.</p>
+                <p>Please review the attached proof and approve or request changes using the link below:</p>
+                <p>
+                  <a href="${approvalLink}" style="background-color: #1e3a5f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                    Review & Approve Proof
+                  </a>
+                </p>
+                <p>Or copy and paste this link into your browser:</p>
+                <p><code>${approvalLink}</code></p>
+                <p>Thank you,<br/>Gippsland Printers Team</p>
+              `
+            };
 
-          transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-              console.error('Email error:', error);
-            } else {
-              console.log('Email sent successfully:', info.response);
-            }
+            transporter.sendMail(mailOptions, (error, info) => {
+              if (error) {
+                console.error('Email error:', error);
+              } else {
+                console.log('Email sent successfully:', info.response);
+              }
+            });
           });
-        });
+        }
       }
     }
   );
@@ -302,29 +310,31 @@ app.post('/api/approve/:token', express.json(), (req, res) => {
           message: `Proof ${newStatus} recorded`
         });
 
-        // Send notification email in background
-        setImmediate(() => {
-          const mailOptions = {
-            from: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
-            to: 'info@gippslandprinters.com.au',
-            subject: `Proof ${newStatus.toUpperCase()} - Job ${proof.jobId}`,
-            html: `
-              <h2>Proof ${newStatus.toUpperCase()}</h2>
-              <p><strong>Job ID:</strong> ${proof.jobId}</p>
-              <p><strong>Status:</strong> ${newStatus}</p>
-              ${feedback ? `<p><strong>Feedback:</strong> ${feedback}</p>` : ''}
-              <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
-            `
-          };
+        // Send notification email in background - only if transporter is configured
+        if (transporter) {
+          setImmediate(() => {
+            const mailOptions = {
+              from: process.env.EMAIL_USER,
+              to: 'info@gippslandprinters.com.au',
+              subject: `Proof ${newStatus.toUpperCase()} - Job ${proof.jobId}`,
+              html: `
+                <h2>Proof ${newStatus.toUpperCase()}</h2>
+                <p><strong>Job ID:</strong> ${proof.jobId}</p>
+                <p><strong>Status:</strong> ${newStatus}</p>
+                ${feedback ? `<p><strong>Feedback:</strong> ${feedback}</p>` : ''}
+                <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+              `
+            };
 
-          transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-              console.error('Notification email error:', error);
-            } else {
-              console.log('Notification email sent:', info.response);
-            }
+            transporter.sendMail(mailOptions, (error, info) => {
+              if (error) {
+                console.error('Notification email error:', error);
+              } else {
+                console.log('Notification email sent:', info.response);
+              }
+            });
           });
-        });
+        }
       }
     );
   });
