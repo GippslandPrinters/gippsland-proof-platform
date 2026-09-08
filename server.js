@@ -1,5 +1,4 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -9,29 +8,23 @@ const nodemailer = require('nodemailer');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Configure email transporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
+    user: process.env.EMAIL_USER || '',
     pass: process.env.EMAIL_PASSWORD || ''
   }
 });
 
-// Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Configure multer for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
+  destination: uploadsDir,
   filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
+    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${path.extname(file.originalname)}`);
   }
 });
 
@@ -46,296 +39,196 @@ const upload = multer({
   }
 });
 
-// Middleware
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
 
-// Initialize SQLite database
-const db = new sqlite3.Database(':memory:', (err) => {
-  if (err) {
-    console.error('Database error:', err);
-  } else {
-    console.log('Connected to SQLite database');
-  }
-});
+const proofs = new Map();
 
-// Create tables
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS jobs (
-      jobId TEXT PRIMARY KEY,
-      customer TEXT NOT NULL,
-      email TEXT NOT NULL,
-      description TEXT,
-      status TEXT DEFAULT 'waiting',
-      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `, (err) => {
-    if (err) console.error('Error creating jobs table:', err);
-  });
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS proofs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      jobId TEXT NOT NULL,
-      fileName TEXT NOT NULL,
-      filePath TEXT NOT NULL,
-      approvalToken TEXT UNIQUE NOT NULL,
-      version INTEGER DEFAULT 1,
-      status TEXT DEFAULT 'pending',
-      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(jobId) REFERENCES jobs(jobId)
-    )
-  `, (err) => {
-    if (err) console.error('Error creating proofs table:', err);
-  });
-
-  // Seed test data
-  const now = new Date().toISOString();
-  db.run(
-    'INSERT OR IGNORE INTO jobs (jobId, customer, email, description, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-    ['TEST001', 'Nathan Test', 'test@gippslandprinters.com.au', 'Test Proof Job', 'waiting', now],
-    (err) => {
-      if (err) console.error('Error seeding TEST001:', err);
-    }
-  );
-  db.run(
-    'INSERT OR IGNORE INTO jobs (jobId, customer, email, description, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-    ['TEST002', 'Another Customer', 'another@test.com', 'Design Approval', 'waiting', now],
-    (err) => {
-      if (err) console.error('Error seeding TEST002:', err);
-    }
-  );
-});
-
-// Root route
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Gippsland Printers - Proof Upload</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    button { background-color: #1e3a5f; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background-color: #152d47; }
+  </style>
+</head>
+<body>
+  <h1>Upload Proof for Approval</h1>
+  <form id="proofForm">
+    <div class="form-group">
+      <label for="customerName">Customer Name:</label>
+      <input type="text" id="customerName" name="customerName" required>
+    </div>
+    <div class="form-group">
+      <label for="customerEmail">Customer Email:</label>
+      <input type="email" id="customerEmail" name="customerEmail" required>
+    </div>
+    <div class="form-group">
+      <label for="jobDetails">Job Details:</label>
+      <textarea id="jobDetails" name="jobDetails" rows="4" required></textarea>
+    </div>
+    <div class="form-group">
+      <label for="proof">PDF Proof:</label>
+      <input type="file" id="proof" name="proof" accept=".pdf" required>
+    </div>
+    <button type="submit">Upload & Send Proof</button>
+  </form>
+  <div id="result"></div>
+  <script>
+    document.getElementById('proofForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData();
+      formData.append('customerName', document.getElementById('customerName').value);
+      formData.append('customerEmail', document.getElementById('customerEmail').value);
+      formData.append('jobDetails', document.getElementById('jobDetails').value);
+      formData.append('proof', document.getElementById('proof').files[0]);
+      try {
+        const response = await fetch('/api/send-proof', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (data.success) {
+          document.getElementById('result').innerHTML = '<div style="color:green"><h3>Success!</h3><p>Proof uploaded and email sent</p></div>';
+          document.getElementById('proofForm').reset();
+        } else {
+          document.getElementById('result').innerHTML = '<div style="color:red">Error: ' + data.error + '</div>';
+        }
+      } catch (err) {
+        document.getElementById('result').innerHTML = '<div style="color:red">Error: ' + err.message + '</div>';
+      }
+    });
+  </script>
+</body>
+</html>`;
+  res.send(html);
 });
 
-// Approve page route
 app.get('/approve/:token', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'approve.html'));
-});
-
-// API endpoints
-
-// Get all jobs
-app.get('/api/jobs', (req, res) => {
-  db.all(`
-    SELECT j.*, COUNT(p.id) as proofCount
-    FROM jobs j
-    LEFT JOIN proofs p ON j.jobId = p.jobId
-    GROUP BY j.jobId
-  `, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json({ jobs: rows || [] });
-    }
-  });
-});
-
-// Create new job
-app.post('/api/jobs', express.json(), (req, res) => {
-  const { jobId, customer, email, description } = req.body;
-
-  if (!jobId || !customer || !email) {
-    return res.status(400).json({ error: 'jobId, customer, and email are required' });
-  }
-
-  db.run(
-    'INSERT INTO jobs (jobId, customer, email, description) VALUES (?, ?, ?, ?)',
-    [jobId, customer, email, description],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.json({
-          success: true,
-          jobId: jobId,
-          message: 'Job created successfully'
-        });
+  const token = req.params.token;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Approve Proof</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+    button { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px; }
+    .approve-btn { background-color: #28a745; color: white; }
+    .reject-btn { background-color: #dc3545; color: white; }
+    textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Proof Approval</h1>
+  <div id="content">Loading...</div>
+  <script>
+    async function loadProof() {
+      try {
+        const response = await fetch('/api/approve/${token}');
+        const proof = await response.json();
+        if (proof.error) {
+          document.getElementById('content').innerHTML = '<div style="color:red">Proof not found</div>';
+          return;
+        }
+        const html = '<p><strong>Job ID:</strong> ' + proof.jobId + '</p>' +
+          '<p><strong>Status:</strong> ' + proof.status + '</p>' +
+          '<p><a href="/uploads/' + proof.fileName + '" target="_blank">View PDF</a></p>' +
+          '<textarea id="feedback" placeholder="Optional feedback"></textarea>' +
+          '<br><button class="approve-btn" onclick="submitResponse(\\'approve\\')">Approve</button>' +
+          '<button class="reject-btn" onclick="submitResponse(\\'reject\\')">Request Changes</button>' +
+          '<div id="response"></div>';
+        document.getElementById('content').innerHTML = html;
+      } catch (err) {
+        document.getElementById('content').innerHTML = '<div style="color:red">Error: ' + err.message + '</div>';
       }
     }
-  );
-});
-
-// Get job details
-app.get('/api/jobs/:jobId', (req, res) => {
-  const { jobId } = req.params;
-
-  db.get('SELECT * FROM jobs WHERE jobId = ?', [jobId], (err, job) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else if (!job) {
-      res.status(404).json({ error: 'Job not found' });
-    } else {
-      res.json(job);
+    async function submitResponse(action) {
+      try {
+        const response = await fetch('/api/approve/${token}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: action, feedback: document.getElementById('feedback').value })
+        });
+        const data = await response.json();
+        document.getElementById('response').innerHTML = data.success ? '<div style="color:green">' + data.message + '</div>' : '<div style="color:red">Error: ' + data.error + '</div>';
+      } catch (err) {
+        document.getElementById('response').innerHTML = '<div style="color:red">Error: ' + err.message + '</div>';
+      }
     }
-  });
+    loadProof();
+  </script>
+</body>
+</html>`;
+  res.send(html);
 });
 
-// Send proof - Upload PDF and generate approval link with direct email
 app.post('/api/send-proof', upload.single('proof'), (req, res) => {
   const { customerName, customerEmail, jobDetails } = req.body;
-  const jobId = `PROOF_${Date.now()}`; // Generate unique job ID
+  if (!req.file) return res.status(400).json({ error: 'No proof file provided' });
+  if (!customerName || !customerEmail || !jobDetails) return res.status(400).json({ error: 'All fields required' });
 
-  if (!req.file) {
-    return res.status(400).json({ error: 'No proof file provided' });
-  }
-
-  if (!customerName || !customerEmail || !jobDetails) {
-    return res.status(400).json({ error: 'Customer name, email, and job details are required' });
-  }
-
-  // Generate unique approval token
   const approvalToken = crypto.randomBytes(16).toString('hex');
-  const filePath = req.file.path;
-  const fileName = req.file.filename;
-
-  // Insert proof record into database
-  db.run(
-    'INSERT INTO proofs (jobId, fileName, filePath, approvalToken, status) VALUES (?, ?, ?, ?, ?)',
-    [jobId, fileName, filePath, approvalToken, 'pending'],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-      } else {
-        // Generate approval link
-        const approvalLink = `${req.protocol}://${req.get('host')}/approve/${approvalToken}`;
-
-        // Send response to client immediately
-        res.json({
-          success: true,
-          message: 'Proof uploaded and email sent successfully',
-          approvalToken: approvalToken,
-          approvalLink: approvalLink,
-          emailSent: true
-        });
-
-        // Send email in background (non-blocking)
-        setImmediate(() => {
-          const mailOptions = {
-            from: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
-            to: customerEmail,
-            subject: `Proof Approval Request - ${jobDetails}`,
-            html: `
-              <h2>Proof Approval Required</h2>
-              <p>Hello ${customerName},</p>
-              <p>Your proof for <strong>${jobDetails}</strong> is ready for approval.</p>
-              <p>Please review the attached proof and approve or request changes using the link below:</p>
-              <p>
-                <a href="${approvalLink}" style="background-color: #1e3a5f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                  Review & Approve Proof
-                </a>
-              </p>
-              <p>Or copy and paste this link into your browser:</p>
-              <p><code>${approvalLink}</code></p>
-              <p>Thank you,<br/>Gippsland Printers Team</p>
-            `
-          };
-
-          transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-              console.error('Email error:', error);
-            } else {
-              console.log('Email sent successfully:', info.response);
-            }
-          });
-        });
-      }
-    }
-  );
-});
-
-// Get proof details for client (using approval token)
-app.get('/api/approve/:token', (req, res) => {
-  const { token } = req.params;
-
-  db.get(`
-    SELECT p.*
-    FROM proofs p
-    WHERE p.approvalToken = ?
-  `, [token], (err, proof) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else if (!proof) {
-      res.status(404).json({ error: 'Proof not found' });
-    } else {
-      res.json(proof);
-    }
+  proofs.set(approvalToken, {
+    jobId: `PROOF_${Date.now()}`,
+    fileName: req.file.filename,
+    filePath: req.file.path,
+    approvalToken: approvalToken,
+    status: 'pending',
+    createdAt: new Date().toISOString()
   });
-});
 
-// Process client approval/rejection
-app.post('/api/approve/:token', express.json(), (req, res) => {
-  const { token } = req.params;
-  const { action, feedback } = req.body;
+  const approvalLink = `${req.protocol}://${req.get('host')}/approve/${approvalToken}`;
+  res.json({ success: true, approvalLink: approvalLink });
 
-  if (!action || !['approve', 'reject'].includes(action)) {
-    return res.status(400).json({ error: 'action must be "approve" or "reject"' });
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
+    setImmediate(() => {
+      transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: customerEmail,
+        subject: `Proof Approval Request - ${jobDetails}`,
+        html: `<h2>Proof Approval Required</h2><p>Hello ${customerName},</p><p>Your proof for <strong>${jobDetails}</strong> is ready for approval.</p><p><a href="${approvalLink}">Review & Approve Proof</a></p>`
+      }, (error) => {
+        if (error) console.error('Email error:', error);
+      });
+    });
   }
-
-  // Get proof details
-  db.get('SELECT * FROM proofs WHERE approvalToken = ?', [token], (err, proof) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (!proof) {
-      return res.status(404).json({ error: 'Proof not found' });
-    }
-
-    // Update proof status
-    const newStatus = action === 'approve' ? 'approved' : 'rejected';
-    db.run(
-      'UPDATE proofs SET status = ? WHERE approvalToken = ?',
-      [newStatus, token],
-      function(err) {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-
-        res.json({
-          success: true,
-          message: `Proof ${newStatus} recorded`
-        });
-
-        // Send notification email in background
-        setImmediate(() => {
-          const mailOptions = {
-            from: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
-            to: 'info@gippslandprinters.com.au',
-            subject: `Proof ${newStatus.toUpperCase()} - Job ${proof.jobId}`,
-            html: `
-              <h2>Proof ${newStatus.toUpperCase()}</h2>
-              <p><strong>Job ID:</strong> ${proof.jobId}</p>
-              <p><strong>Status:</strong> ${newStatus}</p>
-              ${feedback ? `<p><strong>Feedback:</strong> ${feedback}</p>` : ''}
-              <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
-            `
-          };
-
-          transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-              console.error('Notification email error:', error);
-            } else {
-              console.log('Notification email sent:', info.response);
-            }
-          });
-        });
-      }
-    );
-  });
 });
 
-// Health check
+app.get('/api/approve/:token', (req, res) => {
+  const proof = proofs.get(req.params.token);
+  res.status(proof ? 200 : 404).json(proof || { error: 'Proof not found' });
+});
+
+app.post('/api/approve/:token', express.json(), (req, res) => {
+  const proof = proofs.get(req.params.token);
+  if (!proof) return res.status(404).json({ error: 'Proof not found' });
+  
+  const newStatus = req.body.action === 'approve' ? 'approved' : 'rejected';
+  proof.status = newStatus;
+  res.json({ success: true, message: `Proof ${newStatus}` });
+
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
+    setImmediate(() => {
+      transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: 'art@gippslandprinters.com.au',
+        subject: `Proof ${newStatus.toUpperCase()} - Job ${proof.jobId}`,
+        html: `<h2>Proof ${newStatus.toUpperCase()}</h2><p>Job ID: ${proof.jobId}</p><p>Timestamp: ${new Date().toISOString()}</p>`
+      }, (error) => {
+        if (error) console.error('Email error:', error);
+      });
+    });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK' });
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
