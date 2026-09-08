@@ -60,7 +60,7 @@
       color: #555;
     }
 
-    select, input[type="email"], input[type="file"] {
+    select, input[type="email"], input[type="file"], input[type="text"] {
       width: 100%;
       padding: 10px;
       border: 1px solid #ddd;
@@ -310,10 +310,8 @@
       <form id="sendProofForm">
         <div class="form-row">
           <div class="form-group">
-            <label for="jobSelect">Select Job</label>
-            <select id="jobSelect" required>
-              <option value="">-- Choose a job --</option>
-            </select>
+            <label for="customerName">Customer Name</label>
+            <input type="text" id="customerName" placeholder="John Smith" required>
           </div>
 
           <div class="form-group">
@@ -323,6 +321,11 @@
         </div>
 
         <div class="form-row">
+          <div class="form-group">
+            <label for="jobDetails">Job Details</label>
+            <input type="text" id="jobDetails" placeholder="e.g., Business Cards, Flyers, Labels" required>
+          </div>
+
           <div class="form-group">
             <label for="proofFile">Upload Proof PDF</label>
             <input type="file" id="proofFile" accept=".pdf" required>
@@ -373,27 +376,6 @@
   </div>
 
   <script>
-    // Load jobs for dropdown
-    async function loadJobsForDropdown() {
-      try {
-        const response = await fetch('/api/jobs');
-        const data = await response.json();
-        const jobSelect = document.getElementById('jobSelect');
-
-        jobSelect.innerHTML = '<option value="">-- Choose a job --</option>';
-
-        if (data.jobs && data.jobs.length > 0) {
-          data.jobs.forEach(job => {
-            const option = document.createElement('option');
-            option.value = job.jobId;
-            option.textContent = `${job.jobId} - ${job.customer}`;
-            jobSelect.appendChild(option);
-          });
-        }
-      } catch (error) {
-        console.error('Error loading jobs:', error);
-      }
-    }
 
     // Load dashboard
     async function loadDashboard() {
@@ -454,23 +436,26 @@
     document.getElementById('sendProofForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      const jobId = document.getElementById('jobSelect').value;
+      const customerName = document.getElementById('customerName').value;
       const customerEmail = document.getElementById('customerEmail').value;
+      const jobDetails = document.getElementById('jobDetails').value;
       const proofFile = document.getElementById('proofFile').files[0];
       const messageDiv = document.getElementById('message');
       const approvalLinkBox = document.getElementById('approvalLinkBox');
 
-      if (!jobId || !customerEmail || !proofFile) {
-        showMessage('Please select a job, enter customer email, and upload a proof file', 'error');
+      if (!customerName || !customerEmail || !jobDetails || !proofFile) {
+        showMessage('Please fill in all fields and upload a proof file', 'error');
         return;
       }
 
       const formData = new FormData();
       formData.append('proof', proofFile);
+      formData.append('customerName', customerName);
       formData.append('customerEmail', customerEmail);
+      formData.append('jobDetails', jobDetails);
 
       try {
-        const response = await fetch(`/api/jobs/${jobId}/send-proof`, {
+        const response = await fetch(`/api/send-proof`, {
           method: 'POST',
           body: formData
         });
@@ -482,8 +467,9 @@
           document.getElementById('approvalLink').value = data.approvalLink;
           approvalLinkBox.classList.add('show');
           document.getElementById('proofFile').value = '';
-          document.getElementById('jobSelect').value = '';
+          document.getElementById('customerName').value = '';
           document.getElementById('customerEmail').value = '';
+          document.getElementById('jobDetails').value = '';
           loadDashboard();
         } else {
           showMessage(`Error: ${data.error}`, 'error');
@@ -507,7 +493,6 @@
     }
 
     // Initial load and auto-refresh
-    loadJobsForDropdown();
     loadDashboard();
     setInterval(loadDashboard, 30000);
   </script>

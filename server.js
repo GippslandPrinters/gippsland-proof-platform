@@ -168,16 +168,16 @@ app.get('/api/jobs/:jobId', (req, res) => {
 });
 
 // Send proof - Upload PDF and generate approval link
-app.post('/api/jobs/:jobId/send-proof', upload.single('proof'), (req, res) => {
-  const { jobId } = req.params;
-  const { customerEmail } = req.body;
+app.post('/api/send-proof', upload.single('proof'), (req, res) => {
+  const { customerName, customerEmail, jobDetails } = req.body;
+  const jobId = `PROOF_${Date.now()}`; // Generate unique job ID
 
   if (!req.file) {
     return res.status(400).json({ error: 'No proof file provided' });
   }
 
-  if (!customerEmail) {
-    return res.status(400).json({ error: 'Customer email is required' });
+  if (!customerName || !customerEmail || !jobDetails) {
+    return res.status(400).json({ error: 'Customer name, email, and job details are required' });
   }
 
   // Generate unique approval token
@@ -193,30 +193,34 @@ app.post('/api/jobs/:jobId/send-proof', upload.single('proof'), (req, res) => {
       if (err) {
         res.status(500).json({ error: err.message });
       } else {
-        // Get job details for webhook
-        db.get('SELECT * FROM jobs WHERE jobId = ?', [jobId], (err, job) => {
-          if (err || !job) {
-            return res.status(500).json({ error: 'Failed to retrieve job details' });
-          }
+        // Generate approval link
+        const approvalLink = `${req.protocol}://${req.get('host')}/approve/${approvalToken}`;
 
-          // Generate approval link
-          const approvalLink = `${req.protocol}://${req.get('host')}/approve/${approvalToken}`;
+        // Prepare webhook data for Zapier
+        const webhookData = {
+          event: 'proof_sent',
+          jobId: jobId,
+          customer: customerName,
+          email: customerEmail,
+          jobDetails: jobDetails,
+          approvalLink: approvalLink,
+          timestamp: new Date().toISOString()
+        };
 
-          // Prepare webhook data for Zapier
-          const webhookData = {
-            event: 'proof_sent',
-            jobId: jobId,
-            customer: job.customer,
-            email: customerEmail,
-            description: job.description,
-            approvalLink: approvalLink,
-            timestamp: new Date().toISOString()
-          };
+        // Send response to client immediately (don't wait for webhook)
+        res.json({
+          success: true,
+          message: 'Proof uploaded and email sent successfully',
+          approvalToken: approvalToken,
+          approvalLink: approvalLink,
+          emailSent: true
+        });
 
-          // Send webhook to Zapier
-          const https = require('https');
-          const zapierUrl = 'https://hooks.zapier.com/hooks/catch/28758004/4he15ub/';
+        // Send webhook to Zapier in background (non-blocking)
+        const https = require('https');
+        const zapierUrl = 'https://hooks.zapier.com/hooks/catch/28758004/4he15ub/';
 
+        setImmediate(() => {
           const options = {
             method: 'POST',
             headers: {
@@ -225,26 +229,22 @@ app.post('/api/jobs/:jobId/send-proof', upload.single('proof'), (req, res) => {
           };
 
           const zapierReq = https.request(zapierUrl, options, (zapierRes) => {
-            // Webhook sent, respond to client regardless
-            res.json({
-              success: true,
-              message: 'Proof uploaded and email sent successfully',
-              approvalToken: approvalToken,
-              approvalLink: approvalLink,
-              emailSent: true
+            let data = '';
+            zapierRes.on('data', (chunk) => {
+              data += chunk;
+            });
+
+            zapierRes.on('end', () => {
+              console.log('Webhook sent to Zapier');
             });
           });
 
           zapierReq.on('error', (error) => {
-            console.error('Zapier webhook error:', error);
-            // Still respond with success - webhook failure shouldn't block the upload
-            res.json({
-              success: true,
-              message: 'Proof uploaded successfully (email queued)',
-              approvalToken: approvalToken,
-              approvalLink: approvalLink,
-              emailSent: false
-            });
+            console.error('Webhook error:', error.message);
+          });
+
+          zapierReq.setTimeout(5000, () => {
+            zapierReq.destroy();
           });
 
           zapierReq.write(JSON.stringify(webhookData));
@@ -260,9 +260,8 @@ app.get('/api/approve/:token', (req, res) => {
   const { token } = req.params;
 
   db.get(`
-    SELECT p.*, j.jobId, j.customer, j.description, j.email
+    SELECT p.*
     FROM proofs p
-    JOIN jobs j ON p.jobId = j.jobId
     WHERE p.approvalToken = ?
   `, [token], (err, proof) => {
     if (err) {
