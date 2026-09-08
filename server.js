@@ -4,9 +4,19 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+// Configure email transporter
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
+    pass: process.env.EMAIL_PASSWORD || ''
+  }
+});
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -167,7 +177,7 @@ app.get('/api/jobs/:jobId', (req, res) => {
   });
 });
 
-// Send proof - Upload PDF and generate approval link
+// Send proof - Upload PDF and generate approval link with direct email
 app.post('/api/send-proof', upload.single('proof'), (req, res) => {
   const { customerName, customerEmail, jobDetails } = req.body;
   const jobId = `PROOF_${Date.now()}`; // Generate unique job ID
@@ -196,18 +206,7 @@ app.post('/api/send-proof', upload.single('proof'), (req, res) => {
         // Generate approval link
         const approvalLink = `${req.protocol}://${req.get('host')}/approve/${approvalToken}`;
 
-        // Prepare webhook data for Zapier
-        const webhookData = {
-          event: 'proof_sent',
-          jobId: jobId,
-          customer: customerName,
-          email: customerEmail,
-          jobDetails: jobDetails,
-          approvalLink: approvalLink,
-          timestamp: new Date().toISOString()
-        };
-
-        // Send response to client immediately (don't wait for webhook)
+        // Send response to client immediately
         res.json({
           success: true,
           message: 'Proof uploaded and email sent successfully',
@@ -216,39 +215,35 @@ app.post('/api/send-proof', upload.single('proof'), (req, res) => {
           emailSent: true
         });
 
-        // Send webhook to Zapier in background (non-blocking)
-        const https = require('https');
-        const zapierUrl = 'https://hooks.zapier.com/hooks/catch/28758004/4he15ub/';
-
+        // Send email in background (non-blocking)
         setImmediate(() => {
-          const options = {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            }
+          const mailOptions = {
+            from: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
+            to: customerEmail,
+            subject: `Proof Approval Request - ${jobDetails}`,
+            html: `
+              <h2>Proof Approval Required</h2>
+              <p>Hello ${customerName},</p>
+              <p>Your proof for <strong>${jobDetails}</strong> is ready for approval.</p>
+              <p>Please review the attached proof and approve or request changes using the link below:</p>
+              <p>
+                <a href="${approvalLink}" style="background-color: #1e3a5f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Review & Approve Proof
+                </a>
+              </p>
+              <p>Or copy and paste this link into your browser:</p>
+              <p><code>${approvalLink}</code></p>
+              <p>Thank you,<br/>Gippsland Printers Team</p>
+            `
           };
 
-          const zapierReq = https.request(zapierUrl, options, (zapierRes) => {
-            let data = '';
-            zapierRes.on('data', (chunk) => {
-              data += chunk;
-            });
-
-            zapierRes.on('end', () => {
-              console.log('Webhook sent to Zapier');
-            });
+          transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+              console.error('Email error:', error);
+            } else {
+              console.log('Email sent successfully:', info.response);
+            }
           });
-
-          zapierReq.on('error', (error) => {
-            console.error('Webhook error:', error.message);
-          });
-
-          zapierReq.setTimeout(5000, () => {
-            zapierReq.destroy();
-          });
-
-          zapierReq.write(JSON.stringify(webhookData));
-          zapierReq.end();
         });
       }
     }
@@ -302,22 +297,32 @@ app.post('/api/approve/:token', express.json(), (req, res) => {
           return res.status(500).json({ error: err.message });
         }
 
-        // Get job details for webhook
-        db.get('SELECT * FROM jobs WHERE jobId = ?', [proof.jobId], (err, job) => {
-          const webhookData = {
-            event: `proof_${newStatus}`,
-            jobId: proof.jobId,
-            customer: job.customer,
-            email: job.email,
-            proofToken: token,
-            feedback: feedback || null,
-            timestamp: new Date().toISOString()
+        res.json({
+          success: true,
+          message: `Proof ${newStatus} recorded`
+        });
+
+        // Send notification email in background
+        setImmediate(() => {
+          const mailOptions = {
+            from: process.env.EMAIL_USER || 'notifications@gippslandprinters.com.au',
+            to: 'info@gippslandprinters.com.au',
+            subject: `Proof ${newStatus.toUpperCase()} - Job ${proof.jobId}`,
+            html: `
+              <h2>Proof ${newStatus.toUpperCase()}</h2>
+              <p><strong>Job ID:</strong> ${proof.jobId}</p>
+              <p><strong>Status:</strong> ${newStatus}</p>
+              ${feedback ? `<p><strong>Feedback:</strong> ${feedback}</p>` : ''}
+              <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+            `
           };
 
-          res.json({
-            success: true,
-            message: `Proof ${newStatus} recorded`,
-            webhook: webhookData
+          transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+              console.error('Notification email error:', error);
+            } else {
+              console.log('Notification email sent:', info.response);
+            }
           });
         });
       }
